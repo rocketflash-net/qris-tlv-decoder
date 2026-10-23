@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QRIS TLV Decoder</title>
+<meta name="description" content="Paste a QRIS payload and see every EMV tag, length and value explained, with CRC check. Runs entirely in your browser.">
+<meta name="author" content="Daniel Aldo Pratama">
+<link rel="canonical" href="https://rocketflash-net.github.io/qris-tlv-decoder/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="QRIS TLV Decoder">
+<meta property="og:description" content="Paste a QRIS payload and see every EMV tag, length and value explained, with CRC check.">
+<meta property="og:url" content="https://rocketflash-net.github.io/qris-tlv-decoder/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232b45d4'/%3E%3Cpath d='M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h2v2h-2zM22 22h2v2h-2zM18 22h2v2h-2zM22 18h2v2h-2z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f6f7fb; --surface:#ffffff; --ink:#151a28; --slate:#5a6275; --line:#e1e4ee;
+  --cobalt:#2b45d4; --cobalt-wash:#eaedfc;
+  --code-bg:#151a28; --code-ink:#d9def0; --code-key:#9db0ff; --code-num:#ffc58a; --code-dim:#6d7591; --code-sub:#9be3b8;
+  --ok:#1f9d63; --ok-wash:#e3f6ec; --warn:#b26a00; --warn-wash:#fff3dc; --err:#c8323c; --err-wash:#fde8ea;
+  --max:68rem; --gutter:clamp(1rem,4vw,2.5rem);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0d1220; --surface:#131a2c; --ink:#e7eaf3; --slate:#98a0b6; --line:#232b42;
+    --cobalt:#8fa2ff; --cobalt-wash:#1a2246; --code-bg:#070a14;
+    --ok:#3ccf8e; --ok-wash:#0f2a20; --warn:#ffb547; --warn-wash:#2c2210; --err:#ff6b74; --err-wash:#2e1418;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0d1220; --surface:#131a2c; --ink:#e7eaf3; --slate:#98a0b6; --line:#232b42;
+  --cobalt:#8fa2ff; --cobalt-wash:#1a2246; --code-bg:#070a14;
+  --ok:#3ccf8e; --ok-wash:#0f2a20; --warn:#ffb547; --warn-wash:#2c2210; --err:#ff6b74; --err-wash:#2e1418;
+}
+*{box-sizing:border-box;margin:0;padding:0;min-width:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font:400 1rem/1.6 "Schibsted Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--cobalt);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--cobalt);outline-offset:2px}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 var(--gutter)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+.bar{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.25rem 0;font-size:.95rem}
+.bar .home{color:var(--ink);text-decoration:none;font-weight:600}
+.bar .right{display:flex;gap:.6rem;align-items:center}
+.bar .right a{color:var(--slate);text-decoration:none;margin-right:.6rem}
+.bar .right a:hover{color:var(--ink)}
+.toggle{background:var(--surface);border:1px solid var(--line);color:var(--ink);height:2.1rem;min-width:2.1rem;border-radius:999px;cursor:pointer;font:inherit;font-size:.85rem}
+.lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface)}
+.lang button{background:none;border:0;color:var(--slate);font:600 .8rem/1 "Schibsted Grotesk",sans-serif;padding:.6rem .7rem;cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--cobalt);color:#fff}
+:root[data-theme="dark"] .lang button[aria-pressed="true"]{color:#0d1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .lang button[aria-pressed="true"]{color:#0d1220}}
+
+header.top{padding:clamp(1.5rem,5vw,3.5rem) 0 clamp(1.5rem,4vw,2.25rem)}
+h1{font-size:clamp(2.2rem,5.5vw,3.6rem);line-height:1.02;letter-spacing:-.035em;font-weight:800}
+h1 span{color:var(--cobalt)}
+.lede{color:var(--slate);margin-top:.9rem;max-width:40rem;font-size:1.06rem}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.input{padding:1rem}
+.input label{display:block;font-weight:600;font-size:.92rem;margin:0 0 .5rem .2rem}
+textarea{width:100%;min-height:7.5rem;resize:vertical;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:400 .9rem/1.6 "IBM Plex Mono",ui-monospace,monospace;padding:.8rem .9rem;word-break:break-all}
+textarea:focus{border-color:var(--cobalt)}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.75rem}
+.btn{display:inline-flex;align-items:center;padding:.55rem 1rem;border-radius:8px;font:600 .9rem/1.2 "Schibsted Grotesk",sans-serif;text-decoration:none;border:1px solid var(--line);color:var(--ink);background:var(--surface);cursor:pointer}
+.btn:hover{border-color:var(--cobalt)}
+.btn.solid{background:var(--cobalt);border-color:var(--cobalt);color:#fff}
+:root[data-theme="dark"] .btn.solid{color:#0d1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.solid{color:#0d1220}}
+.status{margin-left:auto;display:inline-flex;align-items:center;gap:.45rem;font-weight:600;font-size:.9rem;padding:.4rem .8rem;border-radius:999px}
+.status::before{content:"";width:.5rem;height:.5rem;border-radius:50%;background:currentColor}
+.status.ok{color:var(--ok);background:var(--ok-wash)}
+.status.err{color:var(--err);background:var(--err-wash)}
+.status.warn{color:var(--warn);background:var(--warn-wash)}
+.status[hidden]{display:none}
+
+#out[hidden]{display:none}
+.summary{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:1.25rem}
+.summary div{flex:1 1 10.5rem;background:var(--surface);padding:.85rem 1rem}
+.summary dt{color:var(--slate);font-size:.8rem;font-weight:500}
+.summary dd{font-weight:700;font-size:1.05rem;margin-top:.1rem;overflow-wrap:anywhere}
+
+.raw{background:var(--code-bg);color:var(--code-ink);border-radius:14px;margin-top:1.25rem;overflow:hidden}
+.raw-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem 1rem;padding:.75rem 1.1rem;border-bottom:1px solid rgba(255,255,255,.08);font-size:.8rem;color:var(--code-dim)}
+.legend{display:flex;gap:1rem}
+.legend i{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;margin-right:.35rem;vertical-align:-.02rem}
+.raw pre{padding:1rem 1.1rem 1.15rem;white-space:pre-wrap;word-break:break-all;font:400 .92rem/1.85 "IBM Plex Mono",ui-monospace,monospace}
+.raw .t{color:var(--code-key);font-weight:500}
+.raw .l{color:var(--code-num)}
+.raw .sub>.t{color:var(--code-sub)}
+.raw .seg{border-radius:3px;transition:background .12s}
+.raw .seg.hl{background:rgba(157,176,255,.18)}
+.raw .bad{color:#ff8a92;text-decoration:underline wavy;text-underline-offset:4px}
+
+.grid2{display:grid;grid-template-columns:1fr 18rem;gap:1.25rem;margin-top:1.25rem;align-items:start}
+h2{font-size:1.15rem;font-weight:700;letter-spacing:-.01em;padding:1rem 1.1rem .85rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem}
+h2 .btn{padding:.35rem .7rem;font-size:.82rem}
+
+.rows{list-style:none}
+.row{display:grid;grid-template-columns:3.6rem minmax(0,1fr) minmax(0,1.1fr) 2.4rem;gap:.35rem 1rem;padding:.8rem 1.1rem;border-bottom:1px solid var(--line);align-items:baseline;transition:background .12s}
+.row:last-child{border-bottom:0}
+.row.hl{background:var(--cobalt-wash)}
+.row .tag{font:500 .9rem "IBM Plex Mono",monospace;color:var(--cobalt)}
+.row .name{font-weight:600;font-size:.95rem;line-height:1.35}
+.row .desc{display:block;color:var(--slate);font-size:.86rem;line-height:1.45;margin-top:.2rem;font-weight:400}
+.row .meaning{display:block;margin-top:.35rem;font-size:.86rem;color:var(--ink);font-weight:500;line-height:1.45}
+.row .meaning::before{content:"→ ";color:var(--cobalt)}
+.row .val{font:400 .88rem/1.5 "IBM Plex Mono",monospace;overflow-wrap:anywhere}
+.row .len{font:400 .82rem "IBM Plex Mono",monospace;color:var(--slate);text-align:right}
+.row.child{padding-left:2.1rem;background:color-mix(in srgb,var(--paper) 55%,transparent)}
+.row.child.hl{background:var(--cobalt-wash)}
+.row.child .tag{color:var(--slate)}
+.row.child .tag b{color:var(--cobalt);font-weight:500}
+.row.flag .val{color:var(--err)}
+.thead{display:grid;grid-template-columns:3.6rem minmax(0,1fr) minmax(0,1.1fr) 2.4rem;gap:1rem;padding:.55rem 1.1rem;border-bottom:1px solid var(--line);font-size:.78rem;color:var(--slate);font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.thead span:last-child{text-align:right}
+
+.checks{list-style:none;padding:.4rem 0}
+.checks li{display:grid;grid-template-columns:1.2rem 1fr;gap:.5rem;padding:.5rem 1.1rem;font-size:.9rem;line-height:1.45}
+.checks li::before{font-weight:700;text-align:center}
+.checks .ok::before{content:"✓";color:var(--ok)}
+.checks .warn::before{content:"!";color:var(--warn)}
+.checks .err::before{content:"✕";color:var(--err)}
+.about{padding:1rem 1.1rem;color:var(--slate);font-size:.86rem;line-height:1.55;border-top:1px solid var(--line)}
+.about p+p{margin-top:.6rem}
+
+.empty{margin-top:1.25rem;padding:2rem 1.25rem;text-align:center;color:var(--slate);border:1px dashed var(--line);border-radius:14px}
+
+footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
+
+@media (max-width:860px){
+  .grid2{grid-template-columns:1fr}
+  .side{order:-1}
+}
+@media (max-width:600px){
+  .bar .right a{display:none}
+  .status{margin-left:0;width:100%;justify-content:center}
+  .thead{display:none}
+  .row{grid-template-columns:3rem minmax(0,1fr) auto;padding:.8rem .9rem}
+  .row .val{grid-column:2 / 4}
+  .row .len{grid-row:1;grid-column:3}
+  .row.child{padding-left:1.4rem}
+}
+@media (prefers-reduced-motion:reduce){.row,.raw .seg{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a class="home" href="https://rocketflash-net.github.io/it/">Daniel Aldo Pratama</a>
+    <div class="right">
+      <a href="https://github.com/rocketflash-net/qris-tlv-decoder" target="_blank" rel="noopener">GitHub</a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="id" aria-pressed="false">ID</button>
+      </div>
+      <button class="toggle" id="theme" type="button" aria-label="Switch light or dark theme">◐</button>
+    </div>
+  </div>
+
+  <header class="top">
+    <h1>QRIS <span>TLV</span> Decoder</h1>
+    <p class="lede" data-t="lede"></p>
+  </header>
+
+  <div class="card input">
+    <label for="q" data-t="inputLabel"></label>
+    <textarea id="q" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    <div class="actions">
+      <button class="btn solid" type="button" id="sample" data-t="sample"></button>
+      <button class="btn" type="button" id="clear" data-t="clear"></button>
+      <span class="status" id="status" hidden></span>
+    </div>
+  </div>
+
+  <div class="empty" id="empty" data-t="empty"></div>
+
+  <div id="out" hidden>
+    <dl class="summary" id="summary"></dl>
+
+    <div class="raw">
+      <div class="raw-head">
+        <span data-t="raw"></span>
+        <span class="legend"><span><i style="background:var(--code-key)"></i><span data-t="lgTag"></span></span><span><i style="background:var(--code-num)"></i><span data-t="lgLen"></span></span><span><i style="background:var(--code-ink)"></i><span data-t="lgVal"></span></span></span>
+      </div>
+      <pre id="raw"></pre>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2><span data-t="decoded"></span><button class="btn" type="button" id="copy" data-t="copyJson"></button></h2>
+        <div class="thead"><span data-t="colTag"></span><span data-t="colField"></span><span data-t="colValue"></span><span data-t="colLen"></span></div>
+        <ul class="rows" id="rows"></ul>
+      </div>
+      <aside class="card side">
+        <h2 data-t="checks"></h2>
+        <ul class="checks" id="checks"></ul>
+        <div class="about"><p data-t="privacy"></p><p data-t="ref"></p></div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<footer><div class="wrap"><span data-t="by"></span> <a href="https://rocketflash-net.github.io/it/">Daniel Aldo Pratama</a> · <a href="https://github.com/rocketflash-net/qris-tlv-decoder" target="_blank" rel="noopener" data-t="source"></a></div></footer>
+
+<script>
+(function(){
+  'use strict';
+
+  // ---------- i18n ----------
+  var UI = {
+    en: {
+      lede: 'Paste a QRIS string and every EMV tag is split into tag, length and value, with what each one means. Everything runs in your browser.',
+      inputLabel: 'QRIS payload', placeholder: '00020101021126...6304XXXX', sample: 'Try a sample', clear: 'Clear',
+      empty: 'Paste a QRIS payload above, or try the sample, to see it decoded.',
+      raw: 'Payload', lgTag: 'Tag', lgLen: 'Length', lgVal: 'Value',
+      decoded: 'Decoded fields', copyJson: 'Copy JSON', copied: 'Copied',
+      colTag: 'Tag', colField: 'Field', colValue: 'Value', colLen: 'Len',
+      checks: 'Checks', valid: 'Valid QRIS', invalid: 'Has errors', warnings: 'Valid, with warnings',
+      privacy: 'The payload never leaves this page. Nothing is sent to a server or stored.',
+      ref: 'Based on the EMVCo Merchant-Presented Mode spec and the ASPI QRIS standard. Use it for learning and debugging, not as an official validator.',
+      by: 'Built by', source: 'Source on GitHub',
+      sMerchant: 'Merchant', sCity: 'City', sAmount: 'Amount', sType: 'QR type', sNmid: 'NMID', sCrit: 'Criteria',
+      static: 'Static', dynamic: 'Dynamic', open: 'Entered by payer'
+    },
+    id: {
+      lede: 'Tempel string QRIS dan setiap tag EMV akan dipecah menjadi tag, panjang dan nilai, lengkap dengan artinya. Semua diproses di browser Anda.',
+      inputLabel: 'Payload QRIS', placeholder: '00020101021126...6304XXXX', sample: 'Coba contoh', clear: 'Hapus',
+      empty: 'Tempel payload QRIS di atas, atau coba contoh, untuk melihat hasil decode.',
+      raw: 'Payload', lgTag: 'Tag', lgLen: 'Panjang', lgVal: 'Nilai',
+      decoded: 'Hasil decode', copyJson: 'Salin JSON', copied: 'Tersalin',
+      colTag: 'Tag', colField: 'Field', colValue: 'Nilai', colLen: 'Pjg',
+      checks: 'Pemeriksaan', valid: 'QRIS valid', invalid: 'Ada error', warnings: 'Valid, ada peringatan',
+      privacy: 'Payload tidak pernah keluar dari halaman ini. Tidak ada yang dikirim ke server atau disimpan.',
+      ref: 'Mengacu pada spesifikasi EMVCo Merchant-Presented Mode dan standar QRIS ASPI. Gunakan untuk belajar dan debugging, bukan validator resmi.',
+      by: 'Dibuat oleh', source: 'Kode sumber di GitHub',
+      sMerchant: 'Merchant', sCity: 'Kota', sAmount: 'Nominal', sType: 'Jenis QR', sNmid: 'NMID', sCrit: 'Kriteria',
+      static: 'Statis', dynamic: 'Dinamis', open: 'Diisi pembayar'
+    }
+  };
+  var lang = 'en';
+  function L(en, id){ return {en: en, id: id}; }
+  function tr(x){ return x == null ? '' : (typeof x === 'string' ? x : x[lang]); }
+  function u(k){ return UI[lang][k]; }
+
+  // ---------- Reference data ----------
+  var NETWORKS = {2:'Visa',3:'Visa',4:'Mastercard',5:'Mastercard',9:'Discover',10:'Discover',11:'American Express',12:'American Express',13:'JCB',14:'JCB',15:'UnionPay',16:'UnionPay'};
+  var CURRENCY = {'360':'IDR, Indonesian rupiah','702':'SGD, Singapore dollar','458':'MYR, Malaysian ringgit','764':'THB, Thai baht','392':'JPY, Japanese yen','608':'PHP, Philippine peso','840':'USD, US dollar','156':'CNY, Chinese yuan','410':'KRW, Korean won'};
+  var COUNTRY = {ID:'Indonesia',SG:'Singapore',MY:'Malaysia',TH:'Thailand',JP:'Japan',PH:'Philippines',US:'United States',CN:'China',KR:'South Korea'};
+  var MCC = {
+    '4111':'Commuter transport','4121':'Taxis and limousines','4789':'Transportation services','4814':'Telecommunication services','4900':'Utilities',
+    '5200':'Home supply stores','5251':'Hardware stores','5311':'Department stores','5331':'Variety stores','5399':'General merchandise',
+    '5411':'Grocery stores and supermarkets','5441':'Candy and confectionery stores','5462':'Bakeries','5499':'Miscellaneous food stores',
+    '5541':'Service stations','5651':'Family clothing stores','5691':'Clothing stores','5732':'Electronics stores',
+    '5812':'Restaurants','5813':'Bars and lounges','5814':'Fast food restaurants','5912':'Drug stores and pharmacies',
+    '5942':'Book stores','5945':'Toy and game stores','5977':'Cosmetic stores','5999':'Miscellaneous retail',
+    '7011':'Hotels and lodging','7230':'Beauty and barber shops','7299':'Personal services','7399':'Business services',
+    '7832':'Cinemas','7997':'Clubs and recreation','8011':'Doctors','8062':'Hospitals','8099':'Health services',
+    '8211':'Schools','8220':'Colleges and universities','8398':'Charitable organisations','8661':'Religious organisations','9399':'Government services'
+  };
+  var CRITERIA = {
+    UMI: L('Micro business (Usaha Mikro)','Usaha Mikro'),
+    UKE: L('Small business (Usaha Kecil)','Usaha Kecil'),
+    UME: L('Medium business (Usaha Menengah)','Usaha Menengah'),
+    UBE: L('Large business (Usaha Besar)','Usaha Besar'),
+    URE: L('Regular business (Usaha Reguler)','Usaha Reguler')
+  };
+  var ASK = L('*** means the app asks the payer to fill this in.','*** berarti aplikasi meminta pembayar mengisinya.');
+
+  function money(v, cur){
+    if (!/^\d+(\.\d+)?$/.test(v)) return null;
+    var parts = v.split('.');
+    var whole = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, lang === 'id' ? '.' : ',');
+    var frac = parts[1] ? (lang === 'id' ? ',' : '.') + parts[1] : '';
+    var code = cur === '360' || !cur ? 'Rp' : ((CURRENCY[cur] || '').split(',')[0] || '');
+    return (code + ' ' + whole + frac).trim();
+  }
+
+  // Root-level tags. Each returns {name, desc, explain?, tpl?}
+  function rootDef(tag, ctx){
+    var n = +tag;
+    switch (tag) {
+      case '00': return {name:'Payload Format Indicator', desc:L('Version of the QR data format.','Versi format data QR.'),
+        explain:function(v){ return v === '01' ? L('Version 01, as required.','Versi 01, sesuai standar.') : L('Should be 01.','Seharusnya 01.'); }};
+      case '01': return {name:'Point of Initiation Method', desc:L('Whether the QR is static or dynamic.','Jenis QR: statis atau dinamis.'),
+        explain:function(v){
+          if (v === '11') return L('Static: the same QR is reused and the payer types the amount.','Statis: QR dipakai berulang, nominal diisi pembayar.');
+          if (v === '12') return L('Dynamic: made for one transaction, usually with the amount.','Dinamis: dibuat untuk satu transaksi, biasanya sudah berisi nominal.');
+          return L('Unknown value. Expected 11 or 12.','Nilai tidak dikenal. Seharusnya 11 atau 12.');
+        }};
+      case '51': return {name:'Merchant Account Information (QRIS)', desc:L('Merchant registration in the QRIS national repository.','Data merchant di repositori nasional QRIS.'), tpl:'mai'};
+      case '52': return {name:'Merchant Category Code', desc:L('ISO 18245 code for the type of business.','Kode ISO 18245 untuk jenis usaha.'),
+        explain:function(v){ return MCC[v] ? MCC[v] : null; }};
+      case '53': return {name:'Transaction Currency', desc:L('ISO 4217 numeric currency code.','Kode mata uang ISO 4217 (numerik).'),
+        explain:function(v){ return CURRENCY[v] || null; }};
+      case '54': return {name:'Transaction Amount', desc:L('Amount to pay. Usually present on dynamic QR.','Nominal pembayaran. Umumnya ada pada QR dinamis.'),
+        explain:function(v){ return money(v, ctx['53']); }};
+      case '55': return {name:'Tip or Convenience Indicator', desc:L('Whether a tip or fee applies.','Apakah ada tip atau biaya layanan.'),
+        explain:function(v){
+          return {'01':L('The app asks the payer to enter a tip.','Aplikasi meminta pembayar mengisi tip.'),
+                  '02':L('Fixed convenience fee, see tag 56.','Biaya layanan tetap, lihat tag 56.'),
+                  '03':L('Percentage convenience fee, see tag 57.','Biaya layanan persentase, lihat tag 57.')}[v] || L('Unknown value.','Nilai tidak dikenal.');
+        }};
+      case '56': return {name:'Convenience Fee, Fixed', desc:L('Fixed fee added to the amount.','Biaya tetap yang ditambahkan ke nominal.'),
+        explain:function(v){ return money(v, ctx['53']); }};
+      case '57': return {name:'Convenience Fee, Percentage', desc:L('Fee as a percentage of the amount.','Biaya dalam persen dari nominal.'),
+        explain:function(v){ return v + '%'; }};
+      case '58': return {name:'Country Code', desc:L('ISO 3166-1 alpha-2 country of the merchant.','Negara merchant (ISO 3166-1 alpha-2).'),
+        explain:function(v){ return COUNTRY[v] || null; }};
+      case '59': return {name:'Merchant Name', desc:L('Name shown to the payer.','Nama yang tampil di aplikasi pembayar.')};
+      case '60': return {name:'Merchant City', desc:L('City where the merchant is located.','Kota lokasi merchant.')};
+      case '61': return {name:'Postal Code', desc:L('Postal code of the merchant.','Kode pos merchant.')};
+      case '62': return {name:'Additional Data Field Template', desc:L('Extra details such as bill number, terminal or reference.','Data tambahan seperti nomor tagihan, terminal atau referensi.'), tpl:'add'};
+      case '63': return {name:'CRC', desc:L('CRC-16/CCITT-FALSE over the whole payload, up to and including "6304".','Checksum CRC-16/CCITT-FALSE atas seluruh payload hingga "6304".'),
+        explain:function(){ return ctx.crcNote || null; }};
+      case '64': return {name:'Merchant Information, Language Template', desc:L('Merchant name and city in another language.','Nama dan kota merchant dalam bahasa lain.'), tpl:'lang'};
+    }
+    if (n >= 2 && n <= 25) {
+      var net = NETWORKS[n] || 'EMVCo';
+      return {name:'Merchant Account Information', desc:L('Reserved for ' + net + '.','Dicadangkan untuk ' + net + '.')};
+    }
+    if (n >= 26 && n <= 50) return {name:'Merchant Account Information', desc:L('Merchant account at the payment provider (PJSP) that issued this QR.','Akun merchant di penyelenggara (PJSP) yang menerbitkan QR ini.'), tpl:'mai'};
+    if (n >= 65 && n <= 79) return {name:'Reserved for EMVCo', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
+    if (n >= 80) return {name:'Unreserved Template', desc:L('Free for other parties, such as network-specific data.','Bebas dipakai pihak lain, misalnya data khusus jaringan.'), tpl:'unres'};
+    return {name:'Unknown', desc:L('Not defined in the spec.','Tidak didefinisikan di spesifikasi.')};
+  }
+
+  function subDef(tpl, parent, tag){
+    var n = +tag;
+    if (tpl === 'mai') {
+      if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Provider ID in reverse-domain form.','ID penyelenggara dalam format domain terbalik.'),
+        explain:function(v){ return v === 'ID.CO.QRIS.WWW' ? L('QRIS national repository.','Repositori nasional QRIS.') : null; }};
+      if (tag === '01') return {name:'Merchant PAN', desc:L('Merchant account number. The first 8 digits are the issuer’s NNS.','Nomor akun merchant. 8 digit pertama adalah NNS penerbit.'),
+        explain:function(v){ return /^\d{8}/.test(v) ? 'NNS ' + v.slice(0, 8) : null; }};
+      if (tag === '02') return parent === '51'
+        ? {name:'National Merchant ID (NMID)', desc:L('Merchant ID registered in the QRIS repository.','ID merchant yang terdaftar di repositori QRIS.')}
+        : {name:'Merchant ID', desc:L('Merchant ID at this provider.','ID merchant di penyelenggara ini.')};
+      if (tag === '03') return {name:'Merchant Criteria', desc:L('Business size category.','Kategori skala usaha.'),
+        explain:function(v){ return CRITERIA[v] || null; }};
+      return {name:'Provider-specific data', desc:L('Defined by the provider.','Ditentukan oleh penyelenggara.')};
+    }
+    if (tpl === 'add') {
+      var names = {'01':'Bill Number','02':'Mobile Number','03':'Store Label','04':'Loyalty Number','05':'Reference Label','06':'Customer Label','07':'Terminal Label','08':'Purpose of Transaction'};
+      var descs = {
+        '01':L('Invoice or bill number.','Nomor invoice atau tagihan.'),
+        '02':L('Mobile number, often for top-ups.','Nomor ponsel, sering untuk isi ulang.'),
+        '03':L('Store or outlet identifier.','Identitas toko atau outlet.'),
+        '04':L('Loyalty card number.','Nomor kartu loyalti.'),
+        '05':L('Reference set by the merchant or acquirer.','Referensi dari merchant atau acquirer.'),
+        '06':L('Customer identifier.','Identitas pelanggan.'),
+        '07':L('Terminal or cashier identifier.','Identitas terminal atau kasir.'),
+        '08':L('Why the payment is made.','Tujuan pembayaran.')
+      };
+      if (names[tag]) return {name:names[tag], desc:descs[tag], explain:function(v){ return v === '***' ? ASK : null; }};
+      if (tag === '09') return {name:'Additional Consumer Data Request', desc:L('Data the app should ask the payer for.','Data yang harus diminta aplikasi dari pembayar.'),
+        explain:function(v){
+          var m = {A:L('address','alamat'), M:L('mobile number','nomor ponsel'), E:L('email','email')};
+          var out = v.split('').map(function(c){ return m[c] ? tr(m[c]) : c; });
+          return (lang === 'id' ? 'Minta: ' : 'Ask for: ') + out.join(', ');
+        }};
+      if (tag === '10') return {name:'Merchant Tax ID', desc:L('Tax number of the merchant.','NPWP merchant.')};
+      if (tag === '11') return {name:'Merchant Channel', desc:L('Media, location and presence of the QR.','Media, lokasi dan kehadiran QR.'),
+        explain:function(v){ return channel(v); }};
+      if (n >= 50) return {name:'Payment System Specific Template', desc:L('Data for a specific payment system.','Data untuk sistem pembayaran tertentu.')};
+      return {name:'Reserved', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
+    }
+    if (tpl === 'lang') {
+      if (tag === '00') return {name:'Language Preference', desc:L('ISO 639-1 language code.','Kode bahasa ISO 639-1.')};
+      if (tag === '01') return {name:'Merchant Name, Alternate Language', desc:L('Merchant name in that language.','Nama merchant dalam bahasa tersebut.')};
+      if (tag === '02') return {name:'Merchant City, Alternate Language', desc:L('Merchant city in that language.','Kota merchant dalam bahasa tersebut.')};
+      return {name:'Reserved', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
+    }
+    if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Owner of this template.','Pemilik template ini.')};
+    return {name:'Context-specific data', desc:L('Defined by the template owner.','Ditentukan oleh pemilik template.')};
+  }
+
+  function channel(v){
+    if (!/^\d{3}$/.test(v)) return null;
+    var media = [L('printed sticker','stiker cetak'), L('printed bill or invoice','struk atau invoice cetak'), L('printed poster or magazine','poster atau majalah cetak'), L('other print','cetak lainnya'),
+                 L('merchant POS screen','layar POS merchant'), L('website','situs web'), L('app','aplikasi'), L('other screen','layar lainnya')];
+    var loc = [L('at the merchant','di lokasi merchant'), L('away from the merchant','di luar lokasi merchant'), L('remote commerce','transaksi jarak jauh'), L('other location','lokasi lainnya')];
+    var pres = [L('attended','dilayani kasir'), L('unattended','tanpa kasir'), L('semi-attended','semi-dilayani'), L('other','lainnya')];
+    var a = media[+v[0]], b = loc[+v[1]], c = pres[+v[2]];
+    if (!a || !b || !c) return null;
+    return tr(a) + ', ' + tr(b) + ', ' + tr(c);
+  }
+
+  // ---------- Parsing ----------
+  function parse(s, base){
+    var items = [], errs = [], i = 0;
+    while (i < s.length) {
+      if (s.length - i < 4) { errs.push({code:'trail', pos:base + i, rest:s.slice(i)}); break; }
+      var tag = s.substr(i, 2), ls = s.substr(i + 2, 2);
+      if (!/^\d\d$/.test(tag) || !/^\d\d$/.test(ls)) { errs.push({code:'format', pos:base + i, rest:s.slice(i)}); break; }
+      var len = +ls, value = s.substr(i + 4, len);
+      var item = {tag:tag, len:len, value:value, start:base + i};
+      items.push(item);
+      if (value.length < len) { item.short = true; errs.push({code:'short', pos:base + i, tag:tag, len:len, got:value.length}); break; }
+      i += 4 + len;
+    }
+    return {items:items, errs:errs};
+  }
+
+  function crc16(str){
+    var bytes = new TextEncoder().encode(str), crc = 0xFFFF;
+    for (var i = 0; i < bytes.length; i++) {
+      crc ^= bytes[i] << 8;
+      for (var j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return ('000' + crc.toString(16).toUpperCase()).slice(-4);
+  }
+
+  function decode(s){
+    var res = parse(s, 0), ctx = {}, checks = [];
+    res.items.forEach(function(it){ if (!(it.tag in ctx)) ctx[it.tag] = it.value; });
+
+    res.errs.forEach(function(e){
+      if (e.code === 'format') checks.push({lv:'err', msg:L('Invalid tag or length at position ' + (e.pos + 1) + '.','Tag atau panjang tidak valid di posisi ' + (e.pos + 1) + '.')});
+      if (e.code === 'short') checks.push({lv:'err', msg:L('Tag ' + e.tag + ' declares ' + e.len + ' characters but only ' + e.got + ' remain.','Tag ' + e.tag + ' menyatakan ' + e.len + ' karakter tapi hanya tersisa ' + e.got + '.')});
+      if (e.code === 'trail') checks.push({lv:'err', msg:L('Leftover characters at the end: "' + e.rest + '".','Ada sisa karakter di akhir: "' + e.rest + '".')});
+    });
+
+    // CRC
+    var crcItem = null;
+    res.items.forEach(function(it){ if (it.tag === '63') crcItem = it; });
+    if (crcItem) {
+      if (res.items[res.items.length - 1] !== crcItem) checks.push({lv:'err', msg:L('Tag 63 (CRC) must be the last field.','Tag 63 (CRC) harus menjadi field terakhir.')});
+      if (crcItem.len !== 4) checks.push({lv:'err', msg:L('Tag 63 must be 4 characters long.','Panjang tag 63 harus 4 karakter.')});
+      else {
+        var calc = crc16(s.slice(0, crcItem.start + 4));
+        if (calc === crcItem.value.toUpperCase()) {
+          ctx.crcNote = L('Matches the computed CRC.','Cocok dengan CRC hasil hitung.');
+          checks.push({lv:'ok', msg:L('CRC is valid (' + calc + ').','CRC valid (' + calc + ').')});
+        } else {
+          ctx.crcNote = L('Does not match. Computed: ' + calc + '.','Tidak cocok. Hasil hitung: ' + calc + '.');
+          checks.push({lv:'err', msg:L('CRC mismatch: payload has ' + crcItem.value + ', computed ' + calc + '.','CRC tidak cocok: tertulis ' + crcItem.value + ', hasil hitung ' + calc + '.')});
+        }
+      }
+    }
+
+    // Structure
+    if (res.items.length && res.items[0].tag !== '00') checks.push({lv:'err', msg:L('Tag 00 must be the first field.','Tag 00 harus menjadi field pertama.')});
+    else if (ctx['00'] && ctx['00'] !== '01') checks.push({lv:'err', msg:L('Tag 00 should be "01".','Tag 00 seharusnya "01".')});
+    // Skip missing-tag noise when parsing stopped early: those tags are likely in the unparsed tail
+    if (!res.errs.length) ['00','52','53','58','59','60','63'].forEach(function(t){
+      if (!(t in ctx)) checks.push({lv:'err', msg:L('Required tag ' + t + ' (' + rootDef(t, ctx).name + ') is missing.','Tag wajib ' + t + ' (' + rootDef(t, ctx).name + ') tidak ada.')});
+    });
+    var hasMai = res.items.some(function(it){ var n = +it.tag; return n >= 2 && n <= 51; });
+    if (!hasMai && !res.errs.length) checks.push({lv:'err', msg:L('No merchant account information (tags 02 to 51).','Tidak ada informasi akun merchant (tag 02 sampai 51).')});
+
+    var seen = {};
+    res.items.forEach(function(it){
+      if (seen[it.tag]) checks.push({lv:'warn', msg:L('Tag ' + it.tag + ' appears more than once.','Tag ' + it.tag + ' muncul lebih dari sekali.')});
+      seen[it.tag] = true;
+    });
+
+    if (ctx['01'] === '12' && !('54' in ctx)) checks.push({lv:'warn', msg:L('Dynamic QR without an amount (tag 54).','QR dinamis tanpa nominal (tag 54).')});
+    if ('54' in ctx && !/^\d+(\.\d{1,2})?$/.test(ctx['54'])) checks.push({lv:'warn', msg:L('Amount format looks wrong. Expected digits with an optional decimal point.','Format nominal tidak sesuai. Seharusnya angka dengan desimal opsional.')});
+    if (ctx['55'] === '02' && !('56' in ctx)) checks.push({lv:'err', msg:L('Tag 55 is 02 but the fixed fee (tag 56) is missing.','Tag 55 bernilai 02 tapi biaya tetap (tag 56) tidak ada.')});
+    if (ctx['55'] === '03' && !('57' in ctx)) checks.push({lv:'err', msg:L('Tag 55 is 03 but the percentage fee (tag 57) is missing.','Tag 55 bernilai 03 tapi biaya persentase (tag 57) tidak ada.')});
+
+    // Templates
+    res.items.forEach(function(it){
+      var def = rootDef(it.tag, ctx);
+      if (!def.tpl || it.short) return;
+      var sub = parse(it.value, it.start + 4);
+      if (sub.errs.length || !sub.items.length) {
+        checks.push({lv:'warn', msg:L('Tag ' + it.tag + ' should be a template, but its contents could not be split into sub-tags.','Tag ' + it.tag + ' seharusnya template, tapi isinya tidak bisa dipecah menjadi sub-tag.')});
+        return;
+      }
+      it.children = sub.items;
+      it.tpl = def.tpl;
+    });
+
+    var qris = res.items.filter(function(it){ return it.tag === '51' && it.children && it.children.some(function(c){ return c.tag === '00' && c.value === 'ID.CO.QRIS.WWW'; }); })[0];
+    if (qris) checks.push({lv:'ok', msg:L('QRIS repository data found in tag 51.','Data repositori QRIS ditemukan di tag 51.')});
+    else if (res.items.length) checks.push({lv:'warn', msg:L('No tag 51 with ID.CO.QRIS.WWW. Most QRIS codes include it.','Tidak ada tag 51 dengan ID.CO.QRIS.WWW. Umumnya QRIS memilikinya.')});
+
+    var rest = res.errs.length && res.errs[0].rest ? res.errs[0].rest : '';
+    return {items:res.items, ctx:ctx, checks:checks, rest:rest, qris:qris};
+  }
+
+  // ---------- Rendering ----------
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function rawHTML(items, prefix, sub){
+    return items.map(function(it, k){
+      var id = prefix + k;
+      var inner = it.children ? rawHTML(it.children, id + '.', true) : esc(it.value);
+      return '<span class="seg' + (sub ? ' sub' : '') + '" data-i="' + id + '"><span class="t">' + it.tag + '</span><span class="l">' + ('0' + it.len).slice(-2) + '</span>' + inner + '</span>';
+    }).join('');
+  }
+
+  function rowHTML(it, def, id, parentTag){
+    var m = def.explain ? def.explain(it.value) : null;
+    var tag = parentTag ? '<span>' + parentTag + '.</span><b>' + it.tag + '</b>' : it.tag;
+    return '<li class="row' + (parentTag ? ' child' : '') + (it.short ? ' flag' : '') + '" data-i="' + id + '">' +
+      '<span class="tag">' + tag + '</span>' +
+      '<span class="name">' + esc(def.name) + '<span class="desc">' + esc(tr(def.desc)) + '</span>' + (m ? '<span class="meaning">' + esc(tr(m)) + '</span>' : '') + '</span>' +
+      '<span class="val">' + (it.children ? '<span style="color:var(--slate)">' + it.children.length + (lang === 'id' ? ' sub-tag' : ' sub-tags') + '</span>' : esc(it.value)) + '</span>' +
+      '<span class="len">' + it.len + '</span></li>';
+  }
+
+  function toJSON(d){
+    function map(items, parent, tpl){
+      return items.map(function(it){
+        var def = parent ? subDef(tpl, parent, it.tag) : rootDef(it.tag, d.ctx);
+        var m = def.explain ? def.explain(it.value) : null;
+        var o = {tag:it.tag, name:def.name, length:it.len, value:it.value};
+        if (m) o.meaning = tr(m);
+        if (it.children) o.children = map(it.children, it.tag, it.tpl);
+        return o;
+      });
+    }
+    return JSON.stringify(map(d.items), null, 2);
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var q = $('q'), current = null;
+
+  function render(){
+    var s = q.value.replace(/[\r\n]+/g, '').trim();
+    if (!s) { $('out').hidden = true; $('empty').hidden = false; $('status').hidden = true; current = null; return; }
+    var d = decode(s);
+    current = d;
+    $('out').hidden = false; $('empty').hidden = true;
+
+    // Status
+    var errs = d.checks.filter(function(c){ return c.lv === 'err'; }).length;
+    var warns = d.checks.filter(function(c){ return c.lv === 'warn'; }).length;
+    var st = $('status');
+    st.hidden = false;
+    st.className = 'status ' + (errs ? 'err' : warns ? 'warn' : 'ok');
+    st.textContent = errs ? u('invalid') + ' (' + errs + ')' : warns ? u('warnings') : u('valid');
+
+    // Summary
+    var c = d.ctx, sum = [];
+    if (c['59']) sum.push([u('sMerchant'), c['59']]);
+    if (c['60']) sum.push([u('sCity'), c['60']]);
+    if (c['01']) sum.push([u('sType'), c['01'] === '12' ? u('dynamic') : c['01'] === '11' ? u('static') : c['01']]);
+    sum.push([u('sAmount'), c['54'] ? (money(c['54'], c['53']) || c['54']) : u('open')]);
+    if (d.qris) d.qris.children.forEach(function(ch){
+      if (ch.tag === '02') sum.push([u('sNmid'), ch.value]);
+      if (ch.tag === '03') sum.push([u('sCrit'), ch.value]);
+    });
+    $('summary').innerHTML = sum.map(function(p){ return '<div><dt>' + esc(p[0]) + '</dt><dd>' + esc(p[1]) + '</dd></div>'; }).join('');
+
+    // Raw
+    $('raw').innerHTML = rawHTML(d.items, '', false) + (d.rest ? '<span class="bad">' + esc(d.rest) + '</span>' : '');
+
+    // Rows
+    var html = '';
+    d.items.forEach(function(it, k){
+      html += rowHTML(it, rootDef(it.tag, d.ctx), String(k));
+      if (it.children) it.children.forEach(function(ch, j){
+        html += rowHTML(ch, subDef(it.tpl, it.tag, ch.tag), k + '.' + j, it.tag);
+      });
+    });
+    $('rows').innerHTML = html;
+
+    // Checks: errors first
+    var order = {err:0, warn:1, ok:2};
+    $('checks').innerHTML = d.checks.slice().sort(function(a, b){ return order[a.lv] - order[b.lv]; })
+      .map(function(ch){ return '<li class="' + ch.lv + '">' + esc(tr(ch.msg)) + '</li>'; }).join('');
+  }
+
+  // Link hover between the raw payload and the field rows
+  var hot = null;
+  function setHot(id){
+    if (hot === id) return;
+    document.querySelectorAll('.hl').forEach(function(el){ el.classList.remove('hl'); });
+    hot = id;
+    if (id != null) document.querySelectorAll('[data-i="' + id + '"]').forEach(function(el){ el.classList.add('hl'); });
+  }
+  ['raw', 'rows'].forEach(function(box){
+    $(box).addEventListener('mouseover', function(e){ var el = e.target.closest('[data-i]'); setHot(el ? el.getAttribute('data-i') : null); });
+    $(box).addEventListener('mouseleave', function(){ setHot(null); });
+  });
+  $('raw').addEventListener('click', function(e){
+    var el = e.target.closest('[data-i]');
+    var row = el && document.querySelector('.row[data-i="' + el.getAttribute('data-i') + '"]');
+    if (row) row.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+
+  // ---------- Sample (fictional merchant) ----------
+  function tlv(tag, v){ return tag + ('0' + v.length).slice(-2) + v; }
+  function sample(){
+    var p = tlv('00', '01') + tlv('01', '12') +
+      tlv('26', tlv('00', 'ID.CO.CONTOHPAY.WWW') + tlv('01', '936099990000012345') + tlv('02', '000000012345') + tlv('03', 'UMI')) +
+      tlv('51', tlv('00', 'ID.CO.QRIS.WWW') + tlv('02', 'ID1026000000001') + tlv('03', 'UMI')) +
+      tlv('52', '5812') + tlv('53', '360') + tlv('54', '25000') + tlv('58', 'ID') +
+      tlv('59', 'WARUNG CONTOH') + tlv('60', 'JAKARTA SELATAN') + tlv('61', '12190') +
+      tlv('62', tlv('01', 'INV-0001') + tlv('07', 'KASIR01')) + '6304';
+    return p + crc16(p);
+  }
+
+  // ---------- Wiring ----------
+  function applyLang(l){
+    lang = l;
+    document.documentElement.lang = l;
+    document.querySelectorAll('[data-t]').forEach(function(el){ el.textContent = u(el.getAttribute('data-t')); });
+    q.placeholder = u('placeholder');
+    document.querySelectorAll('.lang button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === l)); });
+    try { localStorage.setItem('qris-lang', l); } catch (e) {}
+    render();
+  }
+  document.querySelectorAll('.lang button').forEach(function(b){
+    b.addEventListener('click', function(){ applyLang(b.getAttribute('data-lang')); });
+  });
+
+  var root = document.documentElement;
+  try { var t = localStorage.getItem('theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
+  $('theme').addEventListener('click', function(){
+    var cur = root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+
+  q.addEventListener('input', render);
+  $('sample').addEventListener('click', function(){ q.value = sample(); render(); });
+  $('clear').addEventListener('click', function(){ q.value = ''; render(); q.focus(); });
+  $('copy').addEventListener('click', function(){
+    if (!current) return;
+    var btn = this;
+    navigator.clipboard.writeText(toJSON(current)).then(function(){
+      btn.textContent = u('copied');
+      setTimeout(function(){ btn.textContent = u('copyJson'); }, 1400);
+    }, function(){});
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem('qris-lang'); } catch (e) {}
+  applyLang(saved || ((navigator.language || '').toLowerCase().indexOf('id') === 0 ? 'id' : 'en'));
+})();
+</script>
+</body>
+</html>
