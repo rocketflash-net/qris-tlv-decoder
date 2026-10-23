@@ -94,6 +94,8 @@ textarea:focus{border-color:var(--cobalt)}
 .raw .sub>.t{color:var(--code-sub)}
 .raw .seg{border-radius:3px;transition:background .12s}
 .raw .seg.hl{background:rgba(157,176,255,.18)}
+.raw .l.over{color:#ff8a92;text-decoration:underline wavy;text-underline-offset:4px}
+.row .len small{display:block;color:var(--err);font-size:.75rem}
 .raw .bad{color:#ff8a92;text-decoration:underline wavy;text-underline-offset:4px}
 
 .grid2{display:grid;grid-template-columns:1fr 18rem;gap:1.25rem;margin-top:1.25rem;align-items:start}
@@ -111,7 +113,7 @@ h2 .btn{padding:.35rem .7rem;font-size:.82rem}
 .row .meaning::before{content:"→ ";color:var(--cobalt)}
 .row .val{font:400 .88rem/1.5 "IBM Plex Mono",monospace;overflow-wrap:anywhere}
 .row .len{font:400 .82rem "IBM Plex Mono",monospace;color:var(--slate);text-align:right}
-.row.child{padding-left:2.1rem;background:color-mix(in srgb,var(--paper) 55%,transparent)}
+.row.child{padding-left:calc(1.1rem + var(--d,1) * 1rem);background:color-mix(in srgb,var(--paper) 55%,transparent)}
 .row.child.hl{background:var(--cobalt-wash)}
 .row.child .tag{color:var(--slate)}
 .row.child .tag b{color:var(--cobalt);font-weight:500}
@@ -125,6 +127,7 @@ h2 .btn{padding:.35rem .7rem;font-size:.82rem}
 .checks .ok::before{content:"✓";color:var(--ok)}
 .checks .warn::before{content:"!";color:var(--warn)}
 .checks .err::before{content:"✕";color:var(--err)}
+.checks .info::before{content:"i";color:var(--cobalt)}
 .about{padding:1rem 1.1rem;color:var(--slate);font-size:.86rem;line-height:1.55;border-top:1px solid var(--line)}
 .about p+p{margin-top:.6rem}
 
@@ -143,7 +146,7 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
   .row{grid-template-columns:3rem minmax(0,1fr) auto;padding:.8rem .9rem}
   .row .val{grid-column:2 / 4}
   .row .len{grid-row:1;grid-column:3}
-  .row.child{padding-left:1.4rem}
+  .row.child{padding-left:calc(.9rem + var(--d,1) * .5rem)}
 }
 @media (prefers-reduced-motion:reduce){.row,.raw .seg{transition:none}}
 </style>
@@ -248,16 +251,18 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
   function u(k){ return UI[lang][k]; }
 
   // ---------- Reference data ----------
+  // Field rules follow Spesifikasi QRIS MPM v1.9 (ASPI), table 3.1.
   var NETWORKS = {2:'Visa',3:'Visa',4:'Mastercard',5:'Mastercard',9:'Discover',10:'Discover',11:'American Express',12:'American Express',13:'JCB',14:'JCB',15:'UnionPay',16:'UnionPay'};
   var CURRENCY = {'360':'IDR, Indonesian rupiah','702':'SGD, Singapore dollar','458':'MYR, Malaysian ringgit','764':'THB, Thai baht','392':'JPY, Japanese yen','608':'PHP, Philippine peso','840':'USD, US dollar','156':'CNY, Chinese yuan','410':'KRW, Korean won'};
   var COUNTRY = {ID:'Indonesia',SG:'Singapore',MY:'Malaysia',TH:'Thailand',JP:'Japan',PH:'Philippines',US:'United States',CN:'China',KR:'South Korea'};
   var MCC = {
-    '4111':'Commuter transport','4121':'Taxis and limousines','4789':'Transportation services','4814':'Telecommunication services','4900':'Utilities',
-    '5200':'Home supply stores','5251':'Hardware stores','5311':'Department stores','5331':'Variety stores','5399':'General merchandise',
+    '4111':'Commuter transport','4121':'Taxis and limousines','4789':'Transportation services','4814':'Telecommunication services','4829':'Money transfer','4900':'Utilities',
+    '5200':'Home supply stores','5251':'Hardware stores','5300':'Wholesale clubs','5310':'Discount stores','5311':'Department stores','5331':'Variety stores','5399':'General merchandise',
     '5411':'Grocery stores and supermarkets','5441':'Candy and confectionery stores','5462':'Bakeries','5499':'Miscellaneous food stores',
     '5541':'Service stations','5651':'Family clothing stores','5691':'Clothing stores','5732':'Electronics stores',
     '5812':'Restaurants','5813':'Bars and lounges','5814':'Fast food restaurants','5912':'Drug stores and pharmacies',
     '5942':'Book stores','5945':'Toy and game stores','5977':'Cosmetic stores','5999':'Miscellaneous retail',
+    '6011':'Cash disbursement (ATM)','6012':'Financial institutions','6540':'Stored value card load',
     '7011':'Hotels and lodging','7230':'Beauty and barber shops','7299':'Personal services','7399':'Business services',
     '7832':'Cinemas','7997':'Clubs and recreation','8011':'Doctors','8062':'Hospitals','8099':'Health services',
     '8211':'Schools','8220':'Colleges and universities','8398':'Charitable organisations','8661':'Religious organisations','9399':'Government services'
@@ -267,12 +272,21 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     UKE: L('Small business (Usaha Kecil)','Usaha Kecil'),
     UME: L('Medium business (Usaha Menengah)','Usaha Menengah'),
     UBE: L('Large business (Usaha Besar)','Usaha Besar'),
-    URE: L('Regular business (Usaha Reguler)','Usaha Reguler')
+    URE: L('Regular business, used when the size is not yet known (Usaha Reguler)','Usaha Reguler, dipakai jika skala usaha belum diketahui'),
+    BLU: L('Public service agency (Badan Layanan Umum)','Badan Layanan Umum'),
+    PSO: L('Public Service Obligation','Public Service Obligation')
   };
+  var SOF = {'0':L('unspecified','tidak ditentukan'), '1':L('debit or savings','debit/rekening simpanan'), '2':L('credit','kredit'), '3':L('e-money','uang elektronik')};
+  var PURPOSE = {POSP:'Payment Credit QRIS', BILL:'Billing Payment'};
   var ASK = L('*** means the app asks the payer to fill this in.','*** berarti aplikasi meminta pembayar mengisinya.');
+  var GUID = function(v){
+    if (v === 'ID.CO.QRIS.WWW') return L('National Merchant Repository (QRIS).','National Merchant Repository (QRIS).');
+    if (v === '00') return L('Default value.','Nilai default.');
+    return null;
+  };
 
   function money(v, cur){
-    if (!/^\d+(\.\d+)?$/.test(v)) return null;
+    if (!/^\d+(\.\d*)?$/.test(v)) return null;
     var parts = v.split('.');
     var whole = parts[0].replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, lang === 'id' ? '.' : ',');
     var frac = parts[1] ? (lang === 'id' ? ',' : '.') + parts[1] : '';
@@ -280,110 +294,142 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     return (code + ' ' + whole + frac).trim();
   }
 
-  // Root-level tags. Each returns {name, desc, explain?, tpl?}
+  function pan(v){
+    if (!/^\d{9}/.test(v)) return null;
+    var s = SOF[v[8]];
+    return 'NNS ' + v.slice(0, 8) + ' · SOF ' + v[8] + ' (' + (s ? tr(s) : 'RFU') + ')';
+  }
+
+  // Root-level tags. Each returns {name, desc, explain?, tpl?, soft?, fixed?, max?, min?, num?}.
+  // tpl names the sub-tag dictionary; soft templates fall back to a raw value without a warning.
   function rootDef(tag, ctx){
     var n = +tag;
     switch (tag) {
-      case '00': return {name:'Payload Format Indicator', desc:L('Version of the QR data format.','Versi format data QR.'),
-        explain:function(v){ return v === '01' ? L('Version 01, as required.','Versi 01, sesuai standar.') : L('Should be 01.','Seharusnya 01.'); }};
-      case '01': return {name:'Point of Initiation Method', desc:L('Whether the QR is static or dynamic.','Jenis QR: statis atau dinamis.'),
+      case '00': return {name:'Payload Format Indicator', desc:L('Version of the QR data format.','Versi format data QR.'), fixed:2, num:true,
+        explain:function(v){ return v === '01' ? L('Version 01, as required.','Versi 01, sesuai standar.') : L('Must be 01.','Harus 01.'); }};
+      case '01': return {name:'Point of Initiation Method', desc:L('Whether the QR is static or dynamic. Either kind may or may not carry an amount.','Jenis QR: statis atau dinamis. Keduanya boleh berisi nominal atau tidak.'), fixed:2, num:true,
         explain:function(v){
-          if (v === '11') return L('Static: the same QR is reused and the payer types the amount.','Statis: QR dipakai berulang, nominal diisi pembayar.');
-          if (v === '12') return L('Dynamic: made for one transaction, usually with the amount.','Dinamis: dibuat untuk satu transaksi, biasanya sudah berisi nominal.');
+          if (v === '11') return L('Static: the same QR is shown for every transaction.','Statis: QR yang sama ditampilkan untuk setiap transaksi.');
+          if (v === '12') return L('Dynamic: a new QR is shown for each transaction.','Dinamis: QR berbeda ditampilkan untuk setiap transaksi.');
           return L('Unknown value. Expected 11 or 12.','Nilai tidak dikenal. Seharusnya 11 atau 12.');
         }};
-      case '51': return {name:'Merchant Account Information (QRIS)', desc:L('Merchant registration in the QRIS national repository.','Data merchant di repositori nasional QRIS.'), tpl:'mai'};
-      case '52': return {name:'Merchant Category Code', desc:L('ISO 18245 code for the type of business.','Kode ISO 18245 untuk jenis usaha.'),
-        explain:function(v){ return MCC[v] ? MCC[v] : null; }};
-      case '53': return {name:'Transaction Currency', desc:L('ISO 4217 numeric currency code.','Kode mata uang ISO 4217 (numerik).'),
+      case '40': return {name:'Transfer Account Information', desc:L('Used for QRIS transfer, cash withdrawal and deposit (separate spec).','Dipakai untuk QRIS Transfer, Tarik Tunai dan Setor Tunai (spesifikasi terpisah).'), tpl:'xfer', max:99};
+      case '51': return {name:'Merchant Account Information, Domestic Central Repository', desc:L('Merchant registration in the National Merchant Repository. Mandatory.','Data merchant di National Merchant Repository. Wajib ada.'), tpl:'nmr', max:99};
+      case '52': return {name:'Merchant Category Code', desc:L('ISO 18245 code for the type of business.','Kode ISO 18245 untuk jenis usaha.'), fixed:4, num:true,
+        explain:function(v){ return MCC[v] || null; }};
+      case '53': return {name:'Transaction Currency', desc:L('ISO 4217 numeric code. Must be 360 when the country is ID.','Kode ISO 4217 numerik. Wajib 360 jika negara ID.'), fixed:3, num:true,
         explain:function(v){ return CURRENCY[v] || null; }};
-      case '54': return {name:'Transaction Amount', desc:L('Amount to pay. Usually present on dynamic QR.','Nominal pembayaran. Umumnya ada pada QR dinamis.'),
+      case '54': return {name:'Transaction Amount', desc:L('Amount to pay. If present, the payer cannot change it.','Nominal pembayaran. Jika ada, pembayar tidak bisa mengubahnya.'), max:13,
         explain:function(v){ return money(v, ctx['53']); }};
-      case '55': return {name:'Tip or Convenience Indicator', desc:L('Whether a tip or fee applies.','Apakah ada tip atau biaya layanan.'),
+      case '55': return {name:'Tip Indicator', desc:L('Whether a tip applies and how.','Apakah ada tip dan jenisnya.'), fixed:2, num:true,
         explain:function(v){
           return {'01':L('The app asks the payer to enter a tip.','Aplikasi meminta pembayar mengisi tip.'),
-                  '02':L('Fixed convenience fee, see tag 56.','Biaya layanan tetap, lihat tag 56.'),
-                  '03':L('Percentage convenience fee, see tag 57.','Biaya layanan persentase, lihat tag 57.')}[v] || L('Unknown value.','Nilai tidak dikenal.');
+                  '02':L('Fixed tip, see tag 56.','Tip nominal tetap, lihat tag 56.'),
+                  '03':L('Percentage tip, see tag 57.','Tip persentase, lihat tag 57.')}[v] || L('Unknown value. Expected 01, 02 or 03.','Nilai tidak dikenal. Seharusnya 01, 02 atau 03.');
         }};
-      case '56': return {name:'Convenience Fee, Fixed', desc:L('Fixed fee added to the amount.','Biaya tetap yang ditambahkan ke nominal.'),
+      case '56': return {name:'Tip Value of Fixed', desc:L('Fixed tip amount. Used only when tag 55 is 02.','Nominal tip tetap. Hanya dipakai jika tag 55 bernilai 02.'), max:13,
         explain:function(v){ return money(v, ctx['53']); }};
-      case '57': return {name:'Convenience Fee, Percentage', desc:L('Fee as a percentage of the amount.','Biaya dalam persen dari nominal.'),
-        explain:function(v){ return v + '%'; }};
-      case '58': return {name:'Country Code', desc:L('ISO 3166-1 alpha-2 country of the merchant.','Negara merchant (ISO 3166-1 alpha-2).'),
+      case '57': return {name:'Tip Value of Percentage', desc:L('Tip percentage, 00.01 to 99.99. Used only when tag 55 is 03.','Persentase tip, 00.01 sampai 99.99. Hanya dipakai jika tag 55 bernilai 03.'), max:5,
+        explain:function(v){ return /^\d+(\.\d*)?$/.test(v) ? parseFloat(v) + '%' : null; }};
+      case '58': return {name:'Country Code', desc:L('ISO 3166-1 alpha-2 country where the merchant is located.','Negara lokasi merchant (ISO 3166-1 alpha-2).'), fixed:2,
         explain:function(v){ return COUNTRY[v] || null; }};
-      case '59': return {name:'Merchant Name', desc:L('Name shown to the payer.','Nama yang tampil di aplikasi pembayar.')};
-      case '60': return {name:'Merchant City', desc:L('City where the merchant is located.','Kota lokasi merchant.')};
-      case '61': return {name:'Postal Code', desc:L('Postal code of the merchant.','Kode pos merchant.')};
-      case '62': return {name:'Additional Data Field Template', desc:L('Extra details such as bill number, terminal or reference.','Data tambahan seperti nomor tagihan, terminal atau referensi.'), tpl:'add'};
-      case '63': return {name:'CRC', desc:L('CRC-16/CCITT-FALSE over the whole payload, up to and including "6304".','Checksum CRC-16/CCITT-FALSE atas seluruh payload hingga "6304".'),
+      case '59': return {name:'Merchant Name', desc:L('Name shown to the payer.','Nama yang tampil di aplikasi pembayar.'), max:25};
+      case '60': return {name:'Merchant City', desc:L('City where the merchant operates.','Kota lokasi merchant beroperasi.'), max:15};
+      case '61': return {name:'Postal Code', desc:L('Postal code of the merchant. Mandatory when the country is ID.','Kode pos merchant. Wajib jika negara ID.'), max:10};
+      case '62': return {name:'Additional Data Field Template', desc:L('Extra details such as bill number, terminal and purpose. Mandatory.','Data tambahan seperti nomor tagihan, terminal dan tujuan transaksi. Wajib ada.'), tpl:'add', max:99};
+      case '63': return {name:'CRC', desc:L('CRC-16 (ISO/IEC 13239, polynomial 1021, initial FFFF) over the whole payload up to and including "6304".','CRC-16 (ISO/IEC 13239, polynomial 1021, nilai awal FFFF) atas seluruh payload hingga "6304".'), fixed:4,
         explain:function(){ return ctx.crcNote || null; }};
-      case '64': return {name:'Merchant Information, Language Template', desc:L('Merchant name and city in another language.','Nama dan kota merchant dalam bahasa lain.'), tpl:'lang'};
+      case '64': return {name:'Merchant Information, Language Template', desc:L('Merchant name and city in another language.','Nama dan kota merchant dalam bahasa lain.'), tpl:'lang', max:99};
+      case '65': return {name:'Merchant Country of Origin', desc:L('Legal country of origin, which can differ from the location in tag 58.','Negara asal merchant secara hukum, bisa berbeda dari lokasi di tag 58.'), fixed:2,
+        explain:function(v){ return COUNTRY[v] || null; }};
     }
     if (n >= 2 && n <= 25) {
       var net = NETWORKS[n] || 'EMVCo';
-      return {name:'Merchant Account Information', desc:L('Reserved for ' + net + '.','Dicadangkan untuk ' + net + '.')};
+      return {name:'Merchant Account Information', desc:L('Reserved for ' + net + '. Only allowed on dynamic QR alongside a domestic acquirer.','Dicadangkan untuk ' + net + '. Hanya boleh pada QR dinamis bersama data acquirer domestik.'), max:99};
     }
-    if (n >= 26 && n <= 50) return {name:'Merchant Account Information', desc:L('Merchant account at the payment provider (PJSP) that issued this QR.','Akun merchant di penyelenggara (PJSP) yang menerbitkan QR ini.'), tpl:'mai'};
-    if (n >= 65 && n <= 79) return {name:'Reserved for EMVCo', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
-    if (n >= 80) return {name:'Unreserved Template', desc:L('Free for other parties, such as network-specific data.','Bebas dipakai pihak lain, misalnya data khusus jaringan.'), tpl:'unres'};
+    if (n >= 26 && n <= 35) return {name:'Merchant Account Information', desc:L('Merchant account at the acquirer (PJSP). The app can route the payment directly from here.','Akun merchant di acquirer (PJSP). Aplikasi bisa langsung merutekan pembayaran dari sini.'), tpl:'mai', max:99};
+    if ((n >= 36 && n <= 39) || (n >= 41 && n <= 50)) return {name:'Merchant Account Information', desc:L('Reserved for future domestic use.','Dicadangkan untuk penggunaan domestik ke depan.'), tpl:'res', soft:true, max:99};
+    if (n >= 66 && n <= 79) return {name:'RFU for EMVCo', desc:L('Reserved for EMVCo.','Dicadangkan untuk EMVCo.'), max:99};
+    if (n >= 80 && n <= 89) return {name:'Reserved for Domestic ID', desc:L('Reserved for domestic use.','Dicadangkan untuk penggunaan domestik.'), tpl:'res', soft:true, max:99};
+    if (n >= 90) return {name:'Unreserved Template', desc:L('Not yet assigned.','Belum ditetapkan peruntukannya.'), tpl:'res', soft:true, max:99};
     return {name:'Unknown', desc:L('Not defined in the spec.','Tidak didefinisikan di spesifikasi.')};
   }
+
+  var RESERVED = {name:'Reserved', desc:L('Not defined in the spec.','Tidak didefinisikan di spesifikasi.')};
 
   function subDef(tpl, parent, tag){
     var n = +tag;
     if (tpl === 'mai') {
-      if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Provider ID in reverse-domain form.','ID penyelenggara dalam format domain terbalik.'),
-        explain:function(v){ return v === 'ID.CO.QRIS.WWW' ? L('QRIS national repository.','Repositori nasional QRIS.') : null; }};
-      if (tag === '01') return {name:'Merchant PAN', desc:L('Merchant account number. The first 8 digits are the issuer’s NNS.','Nomor akun merchant. 8 digit pertama adalah NNS penerbit.'),
-        explain:function(v){ return /^\d{8}/.test(v) ? 'NNS ' + v.slice(0, 8) : null; }};
-      if (tag === '02') return parent === '51'
-        ? {name:'National Merchant ID (NMID)', desc:L('Merchant ID registered in the QRIS repository.','ID merchant yang terdaftar di repositori QRIS.')}
-        : {name:'Merchant ID', desc:L('Merchant ID at this provider.','ID merchant di penyelenggara ini.')};
-      if (tag === '03') return {name:'Merchant Criteria', desc:L('Business size category.','Kategori skala usaha.'),
+      if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Acquirer reverse domain, AID, UUID or the default "00".','Reverse domain acquirer, AID, UUID atau default "00".'), max:32, explain:GUID};
+      if (tag === '01') return {name:'Merchant PAN', desc:L('8-digit NNS, 1-digit source of funds, then the merchant sequence. Used to route to the acquirer.','8 digit NNS, 1 digit sumber dana, lalu nomor urut merchant. Dipakai untuk routing ke acquirer.'), num:true, min:16, max:19, explain:pan};
+      if (tag === '02') return {name:'Merchant ID', desc:L('Merchant ID assigned by the acquirer.','ID merchant dari acquirer.'), max:15};
+      if (tag === '03') return {name:'Merchant Criteria', desc:L('Business size category.','Kategori skala usaha.'), fixed:3,
         explain:function(v){ return CRITERIA[v] || null; }};
-      return {name:'Provider-specific data', desc:L('Defined by the provider.','Ditentukan oleh penyelenggara.')};
+      if (tag === '04') return {name:'Bank Identifier Code (BIC)', desc:L('SWIFT/BIC of the acquirer.','Kode SWIFT/BIC acquirer.'), min:8, max:11};
+      return {name:'Provider-specific data', desc:L('Defined by the acquirer.','Ditentukan oleh acquirer.')};
+    }
+    if (tpl === 'nmr') {
+      if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Reverse domain of the National Merchant Repository.','Reverse domain National Merchant Repository.'), max:32, explain:GUID};
+      if (tag === '02') return {name:'National Merchant ID (NMID)', desc:L('Issued by the National Merchant Repository, e.g. ID1019123456781.','Diterbitkan oleh National Merchant Repository, contoh ID1019123456781.'), max:15};
+      if (tag === '03') return {name:'Merchant Criteria', desc:L('Removed from tag 51 in v1.9. Criteria now live in tags 26 to 35.','Dihapus dari tag 51 di v1.9. Kriteria kini ada di tag 26 sampai 35.'), fixed:3,
+        explain:function(v){ return CRITERIA[v] || null; }};
+      if (tag === '04') return {name:'Printed Version', desc:L('Version on a printed static QRIS sticker, e.g. 1.0.15.12.21.','Versi cetak pada stiker QRIS statis, contoh 1.0.15.12.21.'), max:15};
+      return RESERVED;
+    }
+    if (tpl === 'xfer') {
+      if (tag === '00') return {name:'Reverse Domain', desc:L('Provider reverse domain.','Reverse domain penyelenggara.'), max:32};
+      if (tag === '01') return {name:'Customer PAN (CPAN)', desc:L('Same format as a Merchant PAN.','Format sama dengan Merchant PAN.'), num:true, min:16, max:19, explain:pan};
+      if (tag === '02') return {name:'Beneficiary ID', desc:L('ID of the receiving account.','ID rekening penerima.'), max:15};
+      if (tag === '04') return {name:'Bank Identifier Code (BIC)', desc:L('SWIFT/BIC of the bank.','Kode SWIFT/BIC bank.'), min:8, max:11};
+      return RESERVED;
     }
     if (tpl === 'add') {
-      var names = {'01':'Bill Number','02':'Mobile Number','03':'Store Label','04':'Loyalty Number','05':'Reference Label','06':'Customer Label','07':'Terminal Label','08':'Purpose of Transaction'};
+      var names = {'01':'Bill Number','02':'Mobile Number','03':'Store Label','04':'Loyalty Number','05':'Reference Label','06':'Customer Label','07':'Terminal Label'};
       var descs = {
         '01':L('Invoice or bill number.','Nomor invoice atau tagihan.'),
-        '02':L('Mobile number, often for top-ups.','Nomor ponsel, sering untuk isi ulang.'),
+        '02':L('Customer phone number.','Nomor telepon pelanggan.'),
         '03':L('Store or outlet identifier.','Identitas toko atau outlet.'),
-        '04':L('Loyalty card number.','Nomor kartu loyalti.'),
-        '05':L('Reference set by the merchant or acquirer.','Referensi dari merchant atau acquirer.'),
+        '04':L('Loyalty number.','Nomor loyalti.'),
+        '05':L('Any value set by the merchant or acquirer to identify the transaction.','Nilai dari merchant atau acquirer untuk mengidentifikasi transaksi.'),
         '06':L('Customer identifier.','Identitas pelanggan.'),
-        '07':L('Terminal or cashier identifier.','Identitas terminal atau kasir.'),
-        '08':L('Why the payment is made.','Tujuan pembayaran.')
+        '07':L('Terminal ID, usually from NMR registration.','ID terminal, biasanya dari pendaftaran NMR.')
       };
-      if (names[tag]) return {name:names[tag], desc:descs[tag], explain:function(v){ return v === '***' ? ASK : null; }};
-      if (tag === '09') return {name:'Additional Consumer Data Request', desc:L('Data the app should ask the payer for.','Data yang harus diminta aplikasi dari pembayar.'),
+      if (names[tag]) return {name:names[tag], desc:descs[tag], max:25, explain:function(v){ return v === '***' ? ASK : null; }};
+      if (tag === '08') return {name:'Purpose of Transaction', desc:L('Type of transaction. Mandatory when tag 62 is present.','Jenis transaksi. Wajib jika tag 62 ada.'), max:25,
+        explain:function(v){ return PURPOSE[v] || null; }};
+      if (tag === '09') return {name:'Additional Consumer Data Request', desc:L('Data the payer must provide: A address, M mobile, E email.','Data yang wajib diisi pembayar: A alamat, M ponsel, E email.'), max:3,
         explain:function(v){
           var m = {A:L('address','alamat'), M:L('mobile number','nomor ponsel'), E:L('email','email')};
-          var out = v.split('').map(function(c){ return m[c] ? tr(m[c]) : c; });
-          return (lang === 'id' ? 'Minta: ' : 'Ask for: ') + out.join(', ');
+          return (lang === 'id' ? 'Minta: ' : 'Ask for: ') + v.split('').map(function(c){ return m[c] ? tr(m[c]) : c; }).join(', ');
         }};
-      if (tag === '10') return {name:'Merchant Tax ID', desc:L('Tax number of the merchant.','NPWP merchant.')};
-      if (tag === '11') return {name:'Merchant Channel', desc:L('Media, location and presence of the QR.','Media, lokasi dan kehadiran QR.'),
+      if (tag === '10') return {name:'Merchant Tax ID', desc:L('Merchant tax number (NPWP).','NPWP merchant.'), max:20};
+      if (tag === '11') return {name:'Merchant Channel', desc:L('Media, location and presence of the QR.','Media, lokasi dan kehadiran QR.'), fixed:3,
         explain:function(v){ return channel(v); }};
-      if (n >= 50) return {name:'Payment System Specific Template', desc:L('Data for a specific payment system.','Data untuk sistem pembayaran tertentu.')};
-      return {name:'Reserved', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
+      if (n >= 12 && n <= 49) return {name:'RFU for EMVCo', desc:L('Not used in QRIS.','Tidak digunakan di QRIS.')};
+      if (n >= 50 && n <= 98) return {name:'Payment System Specific', desc:L('Not used in QRIS v1.9.','Tidak digunakan di QRIS v1.9.')};
+      return {name:'Proprietary Data', desc:L('Template with a GUID (00) and proprietary data (01).','Template berisi GUID (00) dan data proprietary (01).'), tpl:'prop', max:95};
+    }
+    if (tpl === 'prop') {
+      if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Owner of the proprietary data.','Pemilik data proprietary.'), max:32};
+      if (tag === '01') return {name:'Proprietary Data', desc:L('Data defined by the owner.','Data yang ditentukan pemiliknya.'), max:81};
+      return RESERVED;
     }
     if (tpl === 'lang') {
-      if (tag === '00') return {name:'Language Preference', desc:L('ISO 639-1 language code.','Kode bahasa ISO 639-1.')};
-      if (tag === '01') return {name:'Merchant Name, Alternate Language', desc:L('Merchant name in that language.','Nama merchant dalam bahasa tersebut.')};
-      if (tag === '02') return {name:'Merchant City, Alternate Language', desc:L('Merchant city in that language.','Kota merchant dalam bahasa tersebut.')};
-      return {name:'Reserved', desc:L('Reserved for future use.','Dicadangkan untuk penggunaan mendatang.')};
+      if (tag === '00') return {name:'Language Preference', desc:L('ISO 639 two-letter language code.','Kode bahasa ISO 639, dua huruf.'), fixed:2};
+      if (tag === '01') return {name:'Merchant Name, Alternate Language', desc:L('Merchant name in that language. Mandatory.','Nama merchant dalam bahasa tersebut. Wajib.'), max:25};
+      if (tag === '02') return {name:'Merchant City, Alternate Language', desc:L('Merchant city in that language.','Kota merchant dalam bahasa tersebut.'), max:15};
+      return {name:'RFU for EMVCo', desc:L('Reserved for EMVCo.','Dicadangkan untuk EMVCo.')};
     }
     if (tag === '00') return {name:'Globally Unique Identifier', desc:L('Owner of this template.','Pemilik template ini.')};
-    return {name:'Context-specific data', desc:L('Defined by the template owner.','Ditentukan oleh pemilik template.')};
+    return {name:'Data', desc:L('Defined by the template owner.','Ditentukan oleh pemilik template.')};
   }
 
   function channel(v){
     if (!/^\d{3}$/.test(v)) return null;
-    var media = [L('printed sticker','stiker cetak'), L('printed bill or invoice','struk atau invoice cetak'), L('printed poster or magazine','poster atau majalah cetak'), L('other print','cetak lainnya'),
+    var media = [L('printed merchant sticker','stiker merchant cetak'), L('printed bill or invoice','struk atau invoice cetak'), L('printed magazine or poster','majalah atau poster cetak'), L('other print','cetak lainnya'),
                  L('merchant POS screen','layar POS merchant'), L('website','situs web'), L('app','aplikasi'), L('other screen','layar lainnya')];
     var loc = [L('at the merchant','di lokasi merchant'), L('away from the merchant','di luar lokasi merchant'), L('remote commerce','transaksi jarak jauh'), L('other location','lokasi lainnya')];
-    var pres = [L('attended','dilayani kasir'), L('unattended','tanpa kasir'), L('semi-attended','semi-dilayani'), L('other','lainnya')];
+    var pres = [L('attended','dilayani'), L('unattended','tanpa petugas'), L('semi-attended (self-checkout)','semi-dilayani (self-checkout)'), L('other','lainnya')];
     var a = media[+v[0]], b = loc[+v[1]], c = pres[+v[2]];
     if (!a || !b || !c) return null;
     return tr(a) + ', ' + tr(b) + ', ' + tr(c);
@@ -405,6 +451,30 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     return {items:items, errs:errs};
   }
 
+  // Some generators write a value longer than 99 and keep only the last two
+  // digits of its length (109 becomes "09"). If the strict parse fails, try
+  // len + 100, len + 200... and accept it only when the rest of the payload
+  // then parses cleanly through to tag 63.
+  function parseRoot(s){
+    var strict = parse(s, 0);
+    if (!strict.errs.length) return strict;
+    // Work back from the failure point: the overflowing tag is usually just before it
+    for (var idx = strict.items.length - 1; idx >= 0; idx--) {
+      var it = strict.items[idx], from = it.start + 4, def = rootDef(it.tag, {});
+      if (def.fixed || (def.max && def.max < 99)) continue;
+      for (var len = it.len + 100; from + len <= s.length; len += 100) {
+        var rest = parse(s.slice(from + len), from + len);
+        var last = rest.items[rest.items.length - 1];
+        if (rest.errs.length || !last || last.tag !== '63') continue;
+        var value = s.substr(from, len);
+        if (def.tpl && parse(value, from).errs.length) continue;
+        var fixed = {tag:it.tag, len:len, value:value, start:it.start, declared:it.len};
+        return {items:strict.items.slice(0, idx).concat([fixed], rest.items), errs:[]};
+      }
+    }
+    return strict;
+  }
+
   function crc16(str){
     var bytes = new TextEncoder().encode(str), crc = 0xFFFF;
     for (var i = 0; i < bytes.length; i++) {
@@ -414,74 +484,142 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     return ('000' + crc.toString(16).toUpperCase()).slice(-4);
   }
 
+  function defOf(it, parent, ctx){ return parent ? subDef(parent.tpl, parent.tag, it.tag) : rootDef(it.tag, ctx); }
+  function child(it, tag){ return it && it.children ? it.children.filter(function(c){ return c.tag === tag; })[0] : null; }
+
   function decode(s){
-    var res = parse(s, 0), ctx = {}, checks = [];
+    var res = parseRoot(s), ctx = {}, checks = [];
+    function add(lv, en, id){ checks.push({lv:lv, msg:L(en, id)}); }
     res.items.forEach(function(it){ if (!(it.tag in ctx)) ctx[it.tag] = it.value; });
+    var byTag = {};
+    res.items.forEach(function(it){ if (!byTag[it.tag]) byTag[it.tag] = it; });
 
     res.errs.forEach(function(e){
-      if (e.code === 'format') checks.push({lv:'err', msg:L('Invalid tag or length at position ' + (e.pos + 1) + '.','Tag atau panjang tidak valid di posisi ' + (e.pos + 1) + '.')});
-      if (e.code === 'short') checks.push({lv:'err', msg:L('Tag ' + e.tag + ' declares ' + e.len + ' characters but only ' + e.got + ' remain.','Tag ' + e.tag + ' menyatakan ' + e.len + ' karakter tapi hanya tersisa ' + e.got + '.')});
-      if (e.code === 'trail') checks.push({lv:'err', msg:L('Leftover characters at the end: "' + e.rest + '".','Ada sisa karakter di akhir: "' + e.rest + '".')});
+      if (e.code === 'format') add('err', 'Invalid tag or length at position ' + (e.pos + 1) + '.', 'Tag atau panjang tidak valid di posisi ' + (e.pos + 1) + '.');
+      if (e.code === 'short') add('err', 'Tag ' + e.tag + ' declares ' + e.len + ' characters but only ' + e.got + ' remain.', 'Tag ' + e.tag + ' menyatakan ' + e.len + ' karakter tapi hanya tersisa ' + e.got + '.');
+      if (e.code === 'trail') add('err', 'Leftover characters at the end: "' + e.rest + '".', 'Ada sisa karakter di akhir: "' + e.rest + '".');
     });
 
-    // CRC
-    var crcItem = null;
-    res.items.forEach(function(it){ if (it.tag === '63') crcItem = it; });
-    if (crcItem) {
-      if (res.items[res.items.length - 1] !== crcItem) checks.push({lv:'err', msg:L('Tag 63 (CRC) must be the last field.','Tag 63 (CRC) harus menjadi field terakhir.')});
-      if (crcItem.len !== 4) checks.push({lv:'err', msg:L('Tag 63 must be 4 characters long.','Panjang tag 63 harus 4 karakter.')});
-      else {
-        var calc = crc16(s.slice(0, crcItem.start + 4));
-        if (calc === crcItem.value.toUpperCase()) {
-          ctx.crcNote = L('Matches the computed CRC.','Cocok dengan CRC hasil hitung.');
-          checks.push({lv:'ok', msg:L('CRC is valid (' + calc + ').','CRC valid (' + calc + ').')});
-        } else {
-          ctx.crcNote = L('Does not match. Computed: ' + calc + '.','Tidak cocok. Hasil hitung: ' + calc + '.');
-          checks.push({lv:'err', msg:L('CRC mismatch: payload has ' + crcItem.value + ', computed ' + calc + '.','CRC tidak cocok: tertulis ' + crcItem.value + ', hasil hitung ' + calc + '.')});
-        }
-      }
-    }
-
-    // Structure
-    if (res.items.length && res.items[0].tag !== '00') checks.push({lv:'err', msg:L('Tag 00 must be the first field.','Tag 00 harus menjadi field pertama.')});
-    else if (ctx['00'] && ctx['00'] !== '01') checks.push({lv:'err', msg:L('Tag 00 should be "01".','Tag 00 seharusnya "01".')});
-    // Skip missing-tag noise when parsing stopped early: those tags are likely in the unparsed tail
-    if (!res.errs.length) ['00','52','53','58','59','60','63'].forEach(function(t){
-      if (!(t in ctx)) checks.push({lv:'err', msg:L('Required tag ' + t + ' (' + rootDef(t, ctx).name + ') is missing.','Tag wajib ' + t + ' (' + rootDef(t, ctx).name + ') tidak ada.')});
-    });
-    var hasMai = res.items.some(function(it){ var n = +it.tag; return n >= 2 && n <= 51; });
-    if (!hasMai && !res.errs.length) checks.push({lv:'err', msg:L('No merchant account information (tags 02 to 51).','Tidak ada informasi akun merchant (tag 02 sampai 51).')});
-
-    var seen = {};
     res.items.forEach(function(it){
-      if (seen[it.tag]) checks.push({lv:'warn', msg:L('Tag ' + it.tag + ' appears more than once.','Tag ' + it.tag + ' muncul lebih dari sekali.')});
-      seen[it.tag] = true;
+      if (it.declared == null) return;
+      var d = ('0' + it.declared).slice(-2);
+      add('err',
+        'Tag ' + it.tag + ' has length "' + d + '", but its value is ' + it.len + ' characters. Lengths are two digits, 01 to 99 (spec 3.2.4), so the generator likely kept only the last two digits. Decoded using the actual length; strict scanners may reject this QR.',
+        'Panjang tag ' + it.tag + ' tertulis "' + d + '", padahal nilainya ' + it.len + ' karakter. Panjang wajib 2 digit, 01 sampai 99 (spesifikasi 3.2.4), jadi generator kemungkinan hanya menulis 2 digit terakhir. Di-decode dengan panjang sebenarnya; scanner yang ketat bisa menolak QR ini.');
     });
 
-    if (ctx['01'] === '12' && !('54' in ctx)) checks.push({lv:'warn', msg:L('Dynamic QR without an amount (tag 54).','QR dinamis tanpa nominal (tag 54).')});
-    if ('54' in ctx && !/^\d+(\.\d{1,2})?$/.test(ctx['54'])) checks.push({lv:'warn', msg:L('Amount format looks wrong. Expected digits with an optional decimal point.','Format nominal tidak sesuai. Seharusnya angka dengan desimal opsional.')});
-    if (ctx['55'] === '02' && !('56' in ctx)) checks.push({lv:'err', msg:L('Tag 55 is 02 but the fixed fee (tag 56) is missing.','Tag 55 bernilai 02 tapi biaya tetap (tag 56) tidak ada.')});
-    if (ctx['55'] === '03' && !('57' in ctx)) checks.push({lv:'err', msg:L('Tag 55 is 03 but the percentage fee (tag 57) is missing.','Tag 55 bernilai 03 tapi biaya persentase (tag 57) tidak ada.')});
-
-    // Templates
-    res.items.forEach(function(it){
-      var def = rootDef(it.tag, ctx);
+    // Expand templates, recursing into nested ones such as 62 > 99
+    function expand(it, def){
       if (!def.tpl || it.short) return;
       var sub = parse(it.value, it.start + 4);
       if (sub.errs.length || !sub.items.length) {
-        checks.push({lv:'warn', msg:L('Tag ' + it.tag + ' should be a template, but its contents could not be split into sub-tags.','Tag ' + it.tag + ' seharusnya template, tapi isinya tidak bisa dipecah menjadi sub-tag.')});
+        if (!def.soft) add('warn', 'Tag ' + it.tag + ' should be a template, but its contents could not be split into sub-tags.', 'Tag ' + it.tag + ' seharusnya template, tapi isinya tidak bisa dipecah menjadi sub-tag.');
         return;
       }
       it.children = sub.items;
       it.tpl = def.tpl;
-    });
+      it.children.forEach(function(c){ expand(c, subDef(it.tpl, it.tag, c.tag)); });
+    }
+    res.items.forEach(function(it){ expand(it, rootDef(it.tag, ctx)); });
 
-    var qris = res.items.filter(function(it){ return it.tag === '51' && it.children && it.children.some(function(c){ return c.tag === '00' && c.value === 'ID.CO.QRIS.WWW'; }); })[0];
-    if (qris) checks.push({lv:'ok', msg:L('QRIS repository data found in tag 51.','Data repositori QRIS ditemukan di tag 51.')});
-    else if (res.items.length) checks.push({lv:'warn', msg:L('No tag 51 with ID.CO.QRIS.WWW. Most QRIS codes include it.','Tidak ada tag 51 dengan ID.CO.QRIS.WWW. Umumnya QRIS memilikinya.')});
+    // Per-field rules: duplicates, fixed and maximum lengths, numeric format
+    function walk(items, parent, prefix){
+      var seen = {};
+      items.forEach(function(it){
+        var def = defOf(it, parent, ctx), label = prefix + it.tag;
+        if (seen[it.tag]) add('err', 'Tag ' + label + ' appears more than once.', 'Tag ' + label + ' muncul lebih dari sekali.');
+        seen[it.tag] = true;
+        if (it.declared == null && !it.short) {
+          if (def.fixed && it.len !== def.fixed) add('err', 'Tag ' + label + ' must be exactly ' + def.fixed + ' characters (found ' + it.len + ').', 'Tag ' + label + ' harus tepat ' + def.fixed + ' karakter (ditemukan ' + it.len + ').');
+          if (def.max && it.len > def.max) add('warn', 'Tag ' + label + ' is ' + it.len + ' characters; the spec allows up to ' + def.max + '.', 'Tag ' + label + ' berisi ' + it.len + ' karakter; spesifikasi maksimal ' + def.max + '.');
+          if (def.min && it.len < def.min) add('warn', 'Tag ' + label + ' is ' + it.len + ' characters; the spec expects at least ' + def.min + '.', 'Tag ' + label + ' berisi ' + it.len + ' karakter; spesifikasi minimal ' + def.min + '.');
+          if (def.num && !/^\d+$/.test(it.value)) add('err', 'Tag ' + label + ' must contain digits only.', 'Tag ' + label + ' hanya boleh berisi angka.');
+        }
+        if (it.children) walk(it.children, it, label + '.');
+      });
+    }
+    walk(res.items, null, '');
+
+    // CRC
+    var crcItem = byTag['63'];
+    if (crcItem) {
+      if (res.items[res.items.length - 1] !== crcItem) add('err', 'Tag 63 (CRC) must be the last field.', 'Tag 63 (CRC) harus menjadi field terakhir.');
+      if (crcItem.len === 4) {
+        var calc = crc16(s.slice(0, crcItem.start + 4));
+        if (calc === crcItem.value.toUpperCase()) {
+          ctx.crcNote = L('Matches the computed CRC.','Cocok dengan CRC hasil hitung.');
+          add('ok', 'CRC is valid (' + calc + ').', 'CRC valid (' + calc + ').');
+        } else {
+          ctx.crcNote = L('Does not match. Computed: ' + calc + '.','Tidak cocok. Hasil hitung: ' + calc + '.');
+          add('err', 'CRC mismatch: payload has ' + crcItem.value + ', computed ' + calc + '.', 'CRC tidak cocok: tertulis ' + crcItem.value + ', hasil hitung ' + calc + '.');
+        }
+      }
+    }
+
+    // Structure and mandatory tags (spec 3.2.6 and section 4)
+    if (res.items.length && res.items[0].tag !== '00') add('err', 'Tag 00 must be the first field.', 'Tag 00 harus menjadi field pertama.');
+    else if (ctx['00'] && ctx['00'] !== '01') add('err', 'Tag 00 must be "01".', 'Tag 00 harus "01".');
+    if (!res.errs.length) {
+      var required = ['00','51','52','53','58','59','60','62','63'];
+      if (ctx['58'] === 'ID' || !('58' in ctx)) required.splice(7, 0, '61');
+      required.forEach(function(t){
+        if (!(t in ctx)) add('err', 'Mandatory tag ' + t + ' (' + rootDef(t, ctx).name + ') is missing.', 'Tag wajib ' + t + ' (' + rootDef(t, ctx).name + ') tidak ada.');
+      });
+    }
+    if (ctx['58'] === 'ID' && '53' in ctx && ctx['53'] !== '360') add('err', 'Currency must be 360 (IDR) when the country is ID.', 'Mata uang wajib 360 (IDR) jika negara ID.');
+
+    // Merchant account templates
+    res.items.forEach(function(it){
+      var n = +it.tag;
+      if (n >= 26 && n <= 35 && it.children) ['00','01','02','03'].forEach(function(t){
+        if (!child(it, t)) add('err', 'Tag ' + it.tag + ' is missing mandatory sub-tag ' + t + ' (' + subDef('mai', it.tag, t).name + ').', 'Tag ' + it.tag + ' tidak memiliki sub-tag wajib ' + t + ' (' + subDef('mai', it.tag, t).name + ').');
+      });
+      if (n >= 26 && n <= 35 && it.children) {
+        var crit = child(it, '03');
+        if (crit && !CRITERIA[crit.value]) add('warn', 'Unknown merchant criteria "' + crit.value + '" in tag ' + it.tag + '.', 'Kriteria merchant "' + crit.value + '" di tag ' + it.tag + ' tidak dikenal.');
+      }
+    });
+    var nmr = byTag['51'];
+    if (nmr && nmr.children) {
+      var g = child(nmr, '00');
+      if (!child(nmr, '02')) add('err', 'Tag 51 is missing the NMID (sub-tag 02).', 'Tag 51 tidak memiliki NMID (sub-tag 02).');
+      if (g && g.value === 'ID.CO.QRIS.WWW') add('ok', 'National Merchant Repository data found in tag 51.', 'Data National Merchant Repository ditemukan di tag 51.');
+      else add('warn', 'Tag 51 GUID is not ID.CO.QRIS.WWW.', 'GUID tag 51 bukan ID.CO.QRIS.WWW.');
+      if (child(nmr, '03')) add('warn', 'Tag 51 contains sub-tag 03 (criteria), which was removed in v1.9.', 'Tag 51 berisi sub-tag 03 (kriteria) yang sudah dihapus di v1.9.');
+    }
+    var hasMai = res.items.some(function(it){ var n = +it.tag; return n >= 26 && n <= 35; });
+    if (nmr && !hasMai && !res.errs.length) add('info', 'No tags 26 to 35, so the paying app must first ask the switch for the acquirer (inquiry via NMID).', 'Tidak ada tag 26 sampai 35, jadi aplikasi pembayar harus inquiry ke switching terlebih dahulu untuk mendapatkan acquirer.');
+
+    // Amount and tips
+    if ('54' in ctx && !/^\d+(\.\d*)?$/.test(ctx['54'])) add('err', 'Amount must be digits with an optional "." decimal point and no thousands separator (e.g. 10000 or 10000.00).', 'Nominal harus angka dengan desimal "." opsional, tanpa pemisah ribuan (contoh 10000 atau 10000.00).');
+    if ('56' in ctx && !/^\d+(\.\d*)?$/.test(ctx['56'])) add('err', 'Tag 56 must be digits with an optional "." decimal point.', 'Tag 56 harus angka dengan desimal "." opsional.');
+    if ('57' in ctx && !/^\d+(\.\d*)?$/.test(ctx['57'])) add('err', 'Tag 57 must be a number from 00.01 to 99.99, without "%".', 'Tag 57 harus angka 00.01 sampai 99.99, tanpa "%".');
+    if ('55' in ctx && ['01','02','03'].indexOf(ctx['55']) < 0) add('warn', 'Tag 55 should be 01, 02 or 03.', 'Tag 55 seharusnya 01, 02 atau 03.');
+    if (ctx['55'] === '02' && !('56' in ctx)) add('err', 'Tag 55 is 02 but the fixed tip (tag 56) is missing.', 'Tag 55 bernilai 02 tapi tip tetap (tag 56) tidak ada.');
+    if (ctx['55'] === '03' && !('57' in ctx)) add('err', 'Tag 55 is 03 but the tip percentage (tag 57) is missing.', 'Tag 55 bernilai 03 tapi persentase tip (tag 57) tidak ada.');
+    if ('56' in ctx && ctx['55'] !== '02') add('warn', 'Tag 56 is only used when tag 55 is 02.', 'Tag 56 hanya dipakai jika tag 55 bernilai 02.');
+    if ('57' in ctx && ctx['55'] !== '03') add('warn', 'Tag 57 is only used when tag 55 is 03.', 'Tag 57 hanya dipakai jika tag 55 bernilai 03.');
+
+    // Additional data (tag 62)
+    var adf = byTag['62'];
+    if (adf && adf.children) {
+      var p = child(adf, '08');
+      if (!p) add('err', 'Tag 62 is missing sub-tag 08 (Purpose of Transaction), which is mandatory.', 'Tag 62 tidak memiliki sub-tag 08 (Purpose of Transaction) yang wajib ada.');
+      else if (!PURPOSE[p.value]) add('warn', 'Purpose of Transaction is "' + p.value + '". Table 3.9 defines POSP and BILL.', 'Purpose of Transaction bernilai "' + p.value + '". Tabel 3.9 hanya mendefinisikan POSP dan BILL.');
+      var unused = adf.children.filter(function(c){ var n = +c.tag; return n >= 12 && n <= 98; }).map(function(c){ return '62.' + c.tag; });
+      if (unused.length) add('warn', unused.join(', ') + ': sub-tags 12 to 98 are not used in QRIS v1.9.', unused.join(', ') + ': sub-tag 12 sampai 98 tidak digunakan di QRIS v1.9.');
+      var req = child(adf, '09');
+      if (req && (!/^[AME]+$/.test(req.value) || /(.).*\1/.test(req.value))) add('err', 'Tag 62.09 may only contain A, M and E, each at most once.', 'Tag 62.09 hanya boleh berisi A, M dan E, masing-masing maksimal sekali.');
+      var prop = child(adf, '99');
+      if (prop && prop.children && (!child(prop, '00') || !child(prop, '01'))) add('err', 'Tag 62.99 must contain sub-tags 00 and 01.', 'Tag 62.99 wajib berisi sub-tag 00 dan 01.');
+    }
+
+    // Language template (tag 64)
+    var lt = byTag['64'];
+    if (lt && lt.children && (!child(lt, '00') || !child(lt, '01'))) add('err', 'Tag 64 must contain sub-tags 00 (language) and 01 (merchant name).', 'Tag 64 wajib berisi sub-tag 00 (bahasa) dan 01 (nama merchant).');
 
     var rest = res.errs.length && res.errs[0].rest ? res.errs[0].rest : '';
-    return {items:res.items, ctx:ctx, checks:checks, rest:rest, qris:qris};
+    return {items:res.items, ctx:ctx, checks:checks, rest:rest, nmr:nmr};
   }
 
   // ---------- Rendering ----------
@@ -491,32 +629,37 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     return items.map(function(it, k){
       var id = prefix + k;
       var inner = it.children ? rawHTML(it.children, id + '.', true) : esc(it.value);
-      return '<span class="seg' + (sub ? ' sub' : '') + '" data-i="' + id + '"><span class="t">' + it.tag + '</span><span class="l">' + ('0' + it.len).slice(-2) + '</span>' + inner + '</span>';
+      return '<span class="seg' + (sub ? ' sub' : '') + '" data-i="' + id + '"><span class="t">' + it.tag + '</span><span class="l' + (it.declared != null ? ' over' : '') + '">' + ('0' + it.len).slice(-2) + '</span>' + inner + '</span>';
     }).join('');
   }
 
-  function rowHTML(it, def, id, parentTag){
-    var m = def.explain ? def.explain(it.value) : null;
-    var tag = parentTag ? '<span>' + parentTag + '.</span><b>' + it.tag + '</b>' : it.tag;
-    return '<li class="row' + (parentTag ? ' child' : '') + (it.short ? ' flag' : '') + '" data-i="' + id + '">' +
-      '<span class="tag">' + tag + '</span>' +
-      '<span class="name">' + esc(def.name) + '<span class="desc">' + esc(tr(def.desc)) + '</span>' + (m ? '<span class="meaning">' + esc(tr(m)) + '</span>' : '') + '</span>' +
-      '<span class="val">' + (it.children ? '<span style="color:var(--slate)">' + it.children.length + (lang === 'id' ? ' sub-tag' : ' sub-tags') + '</span>' : esc(it.value)) + '</span>' +
-      '<span class="len">' + it.len + '</span></li>';
+  function rowsHTML(items, parent, ctx, idPrefix, tagPrefix, depth){
+    return items.map(function(it, k){
+      var def = defOf(it, parent, ctx), id = idPrefix + k;
+      var m = def.explain ? def.explain(it.value) : null;
+      var tag = tagPrefix ? '<span>' + tagPrefix + '</span><b>' + it.tag + '</b>' : it.tag;
+      var row = '<li class="row' + (depth ? ' child' : '') + (it.short || it.declared != null ? ' flag' : '') + '" data-i="' + id + '"' + (depth ? ' style="--d:' + depth + '"' : '') + '>' +
+        '<span class="tag">' + tag + '</span>' +
+        '<span class="name">' + esc(def.name) + '<span class="desc">' + esc(tr(def.desc)) + '</span>' + (m ? '<span class="meaning">' + esc(tr(m)) + '</span>' : '') + '</span>' +
+        '<span class="val">' + (it.children ? '<span style="color:var(--slate)">' + it.children.length + (lang === 'id' ? ' sub-tag' : ' sub-tags') + '</span>' : esc(it.value)) + '</span>' +
+        '<span class="len">' + it.len + (it.declared != null ? '<small>(' + ('0' + it.declared).slice(-2) + ')</small>' : '') + '</span></li>';
+      return row + (it.children ? rowsHTML(it.children, it, ctx, id + '.', tagPrefix + it.tag + '.', depth + 1) : '');
+    }).join('');
   }
 
   function toJSON(d){
-    function map(items, parent, tpl){
+    function map(items, parent){
       return items.map(function(it){
-        var def = parent ? subDef(tpl, parent, it.tag) : rootDef(it.tag, d.ctx);
+        var def = defOf(it, parent, d.ctx);
         var m = def.explain ? def.explain(it.value) : null;
         var o = {tag:it.tag, name:def.name, length:it.len, value:it.value};
+        if (it.declared != null) o.declaredLength = it.declared;
         if (m) o.meaning = tr(m);
-        if (it.children) o.children = map(it.children, it.tag, it.tpl);
+        if (it.children) o.children = map(it.children, it);
         return o;
       });
     }
-    return JSON.stringify(map(d.items), null, 2);
+    return JSON.stringify(map(d.items, null), null, 2);
   }
 
   var $ = function(id){ return document.getElementById(id); };
@@ -543,27 +686,21 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
     if (c['60']) sum.push([u('sCity'), c['60']]);
     if (c['01']) sum.push([u('sType'), c['01'] === '12' ? u('dynamic') : c['01'] === '11' ? u('static') : c['01']]);
     sum.push([u('sAmount'), c['54'] ? (money(c['54'], c['53']) || c['54']) : u('open')]);
-    if (d.qris) d.qris.children.forEach(function(ch){
-      if (ch.tag === '02') sum.push([u('sNmid'), ch.value]);
-      if (ch.tag === '03') sum.push([u('sCrit'), ch.value]);
-    });
+    var nmid = child(d.nmr, '02');
+    if (nmid) sum.push([u('sNmid'), nmid.value]);
+    var crit = null;
+    d.items.forEach(function(it){ var n = +it.tag; if (!crit && n >= 26 && n <= 35) crit = child(it, '03'); });
+    if (crit) sum.push([u('sCrit'), crit.value]);
     $('summary').innerHTML = sum.map(function(p){ return '<div><dt>' + esc(p[0]) + '</dt><dd>' + esc(p[1]) + '</dd></div>'; }).join('');
 
     // Raw
     $('raw').innerHTML = rawHTML(d.items, '', false) + (d.rest ? '<span class="bad">' + esc(d.rest) + '</span>' : '');
 
     // Rows
-    var html = '';
-    d.items.forEach(function(it, k){
-      html += rowHTML(it, rootDef(it.tag, d.ctx), String(k));
-      if (it.children) it.children.forEach(function(ch, j){
-        html += rowHTML(ch, subDef(it.tpl, it.tag, ch.tag), k + '.' + j, it.tag);
-      });
-    });
-    $('rows').innerHTML = html;
+    $('rows').innerHTML = rowsHTML(d.items, null, d.ctx, '', '', 0);
 
     // Checks: errors first
-    var order = {err:0, warn:1, ok:2};
+    var order = {err:0, warn:1, info:2, ok:3};
     $('checks').innerHTML = d.checks.slice().sort(function(a, b){ return order[a.lv] - order[b.lv]; })
       .map(function(ch){ return '<li class="' + ch.lv + '">' + esc(tr(ch.msg)) + '</li>'; }).join('');
   }
@@ -591,10 +728,10 @@ footer{padding:2.5rem 0 3rem;color:var(--slate);font-size:.9rem}
   function sample(){
     var p = tlv('00', '01') + tlv('01', '12') +
       tlv('26', tlv('00', 'ID.CO.CONTOHPAY.WWW') + tlv('01', '936099990000012345') + tlv('02', '000000012345') + tlv('03', 'UMI')) +
-      tlv('51', tlv('00', 'ID.CO.QRIS.WWW') + tlv('02', 'ID1026000000001') + tlv('03', 'UMI')) +
+      tlv('51', tlv('00', 'ID.CO.QRIS.WWW') + tlv('02', 'ID1026000000001')) +
       tlv('52', '5812') + tlv('53', '360') + tlv('54', '25000') + tlv('58', 'ID') +
       tlv('59', 'WARUNG CONTOH') + tlv('60', 'JAKARTA SELATAN') + tlv('61', '12190') +
-      tlv('62', tlv('01', 'INV-0001') + tlv('07', 'KASIR01')) + '6304';
+      tlv('62', tlv('01', 'INV-0001') + tlv('07', 'KASIR01') + tlv('08', 'POSP') + tlv('11', '400')) + '6304';
     return p + crc16(p);
   }
 
